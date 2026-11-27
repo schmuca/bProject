@@ -2,21 +2,28 @@ name: Poll Allegiant ADS-B
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    # Offset from :00 to avoid top-of-hour GitHub Actions cron congestion
+    - cron: "3,13,23,33,43,53 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  # Fresh group name so runs are not blocked by the orphaned queued run on "adsb-poll"
+  group: adsb-poll-v2
+  cancel-in-progress: false
+
 jobs:
   collect:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -27,6 +34,10 @@ jobs:
 
       - name: Commit and push new pings
         run: |
+          if [ ! -d data/raw ]; then
+            echo "No new telemetry to commit."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/raw/
@@ -35,5 +46,5 @@ jobs:
             exit 0
           fi
           git commit -m "chore(data): log Allegiant pings $(date -u +'%Y-%m-%d %H:%M UTC')"
-          git pull --rebase origin main
-          git push
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
